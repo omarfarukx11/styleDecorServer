@@ -29,6 +29,7 @@ async function run() {
     const db = client.db("servicesdb");
     const servicesCollection = db.collection("services");
     const decoratorsCollection = db.collection("decorators");
+    const serviceCenterCollection = db.collection("serviceCenter");
 
     //------------- services apis ------------
     app.get('/services' , async (req , res ) => { 
@@ -40,13 +41,18 @@ async function run() {
 
     // -------------Decorator related Apis --------------
      app.get('/decorators' , async (req , res ) => { 
-        const cursor = decoratorsCollection.find().sort({rating : -1}).limit(6)
+        const cursor = decoratorsCollection.find().sort({rating : -1 }).limit(6)
         const result = await cursor.toArray()
         res.send(result)
       })
 
 
-
+// ---------------service center Apis --------------
+   app.get('/serviceCenter' , async (req , res ) => { 
+        const cursor = serviceCenterCollection.find()
+        const result = await cursor.toArray()
+        res.send(result)
+      })
 
 
 
