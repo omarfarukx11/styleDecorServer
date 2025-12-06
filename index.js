@@ -26,13 +26,15 @@ const client = new MongoClient(uri, {
 async function run() {
   try {
     await client.connect();
-    
+    const db = client.db("servicesdb");
+    const servicesCollection = db.collection("services");
 
-
-
-
-
-
+    //------------- services apis ------------
+    app.get('/services' , async (req , res ) => { 
+        const cursor = servicesCollection.find().sort({rating : -1}).limit(6)
+        const result = await cursor.toArray()
+        res.send(result)
+     })
 
 
 
@@ -52,7 +54,6 @@ async function run() {
     await client.db("admin").command({ ping: 1 });
     console.log("Pinged your deployment. You successfully connected to MongoDB!");
   } finally {
-    await client.close();
   }
 }
 run().catch(console.dir);
