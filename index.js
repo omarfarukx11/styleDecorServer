@@ -61,6 +61,7 @@ async function run() {
     const servicesCollection = db.collection("services");
     const decoratorsCollection = db.collection("decorators");
     const serviceCenterCollection = db.collection("serviceCenter");
+    const bookingCollection = db.collection("bookings");
 
     //------------- services apis ------------
     app.get("/services", async (req, res) => {
@@ -110,6 +111,16 @@ async function run() {
       const result = await cursor.toArray();
       res.send(result);
     });
+
+
+
+    // booking Related Apis
+    app.post('/booking' , async (req , res ) => { 
+          const book = req.body;
+          book.createAt = new Date()
+          const result = await bookingCollection.insertOne(book)
+          res.send(result)
+     })
 
 
     
