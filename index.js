@@ -3,7 +3,7 @@ const cors = require("cors");
 const app = express();
 require("dotenv").config();
 const port = process.env.PORT || 3000;
-const { MongoClient, ServerApiVersion } = require("mongodb");
+const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb");
 
 // mongoDB Connection
 const uri = `mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASS}@cluster0.oyyjehq.mongodb.net/?appName=Cluster0`;
@@ -95,6 +95,12 @@ async function run() {
       res.send(result);
     });
 
+      app.get("/servicesDetails/:id", async (req, res) => {
+      const id = req.params.id;
+      const query = { _id: new ObjectId(id) };
+      const result = await servicesCollection.findOne(query)
+      res.send(result);
+    });
 
 
     
