@@ -15,10 +15,19 @@ app.use(cors());
 
 const admin = require("firebase-admin");
 
-const serviceAccount = require("./styledecor-x11-firebase-adminsdk.json");
-
 admin.initializeApp({
-  credential: admin.credential.cert(serviceAccount)
+  credential: admin.credential.cert({
+    type: process.env.FIREBASE_TYPE,
+    project_id: process.env.FIREBASE_PROJECT_ID,
+    private_key_id: process.env.FIREBASE_PRIVATE_KEY_ID,
+    private_key: process.env.FIREBASE_PRIVATE_KEY.replace(/\\n/g, "\n"), // important
+    client_email: process.env.FIREBASE_CLIENT_EMAIL,
+    client_id: process.env.FIREBASE_CLIENT_ID,
+    auth_uri: process.env.FIREBASE_AUTH_URI,
+    token_uri: process.env.FIREBASE_TOKEN_URI,
+    auth_provider_x509_cert_url: process.env.FIREBASE_AUTH_PROVIDER_X509_CERT_URL,
+    client_x509_cert_url: process.env.FIREBASE_CLIENT_X509_CERT_URL,
+  }),
 });
 
 
@@ -58,10 +67,43 @@ async function run() {
   try {
     await client.connect();
     const db = client.db("servicesdb");
+    const usersCollection = db.collection("users");
     const servicesCollection = db.collection("services");
     const decoratorsCollection = db.collection("decorators");
     const serviceCenterCollection = db.collection("serviceCenter");
     const bookingCollection = db.collection("bookings");
+
+
+    //------------------ users related apis --------------
+      app.get("/users/:email/role", async (req, res) => {
+      const email = req.params.email;
+      const query = { email };
+      const user = await usersCollection.findOne(query);
+      res.send({ role: user?.role || "user" });
+    });
+
+
+    app.post('/users', async  (req , res ) => {
+        const user = req.body;
+        const email = user.email;
+        user.role = "user"
+        user.createAt = new Date()
+
+        const userExist = await usersCollection.findOne({email})
+        if(userExist) {
+          return res.send({message : 'user exist'})
+        }
+
+        const result = usersCollection.insertOne(user)
+        res.send(result)
+    })
+
+
+
+
+
+
+
 
     //------------- services apis ------------
     app.get("/services", async (req, res) => {
@@ -115,12 +157,34 @@ async function run() {
 
 
     // booking Related Apis
+
+    app.get('/booking' , async (req , res ) => { 
+      const email = req.query.email;
+      const query = {}
+      if(email) {
+        query.userEmail = email
+      }
+      console.log(req.query)
+        const cursor = await bookingCollection.find(query).toArray()
+        res.send(cursor)
+        
+     })
+
     app.post('/booking' , async (req , res ) => { 
           const book = req.body;
           book.createAt = new Date()
           const result = await bookingCollection.insertOne(book)
           res.send(result)
      })
+
+
+
+
+
+
+
+
+
 
 
     
