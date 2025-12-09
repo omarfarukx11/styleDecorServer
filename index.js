@@ -4,7 +4,7 @@ const app = express();
 require("dotenv").config();
 const port = process.env.PORT || 3000;
 const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb");
-
+const stripe = require('stripe')(process.env.STRIPE);
 // mongoDB Connection
 const uri = `mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASS}@cluster0.oyyjehq.mongodb.net/?appName=Cluster0`;
 
@@ -176,6 +176,20 @@ async function run() {
           const result = await bookingCollection.insertOne(book)
           res.send(result)
      })
+
+     app.patch('/booking/:id' , async (req , res) => { 
+        const id = req.params.id
+        const updateInfo = req.body
+        const query = {_id : new ObjectId(id)}
+        const updateDoc = {
+      $set: {
+        ...updateInfo,
+        updatedAt: new Date(),
+      },
+    };
+        const result = await bookingCollection.updateOne(query , updateDoc)
+        res.send(result)
+      })
 
 
     app.delete('/booking/:id' ,async (req , res ) => { 
