@@ -139,7 +139,7 @@ async function run() {
       res.send(result);
     });
 
-      app.get("/servicesDetails/:id", async (req, res) => {
+    app.get("/servicesDetails/:id", async (req, res) => {
       const id = req.params.id;
       const query = { _id: new ObjectId(id) };
       const result = await servicesCollection.findOne(query)
@@ -166,7 +166,7 @@ async function run() {
         query.userEmail = email
       }
       console.log(req.query)
-        const cursor = await bookingCollection.find(query).toArray()
+        const cursor = await bookingCollection.find(query).sort({createAt : - 1}).toArray()
         res.send(cursor)
         
      })
@@ -202,6 +202,15 @@ async function run() {
 
 
     //------------- payment related apis-------------
+    app.get('/payment-history' , async (req , res) => { 
+          const email = req.query.email
+          const query = {}
+          if(email) {
+            query.userEmail = email
+          }
+          const result = await paymentCollection.find(query).sort({paidAt : - 1}).toArray()
+          res.send(result)
+     })
     app.post('/create-checkout-session' , async (req , res ) => {
       const paymentInfo = req.body;
        const amount = parseInt(paymentInfo.cost) * 100;
@@ -212,7 +221,7 @@ async function run() {
               currency: "USD",
               unit_amount: amount,
               product_data: {
-              serviceName: paymentInfo.serviceName,
+              name: paymentInfo.serviceName,
               },
             },
             quantity: 1,
@@ -233,68 +242,70 @@ async function run() {
     }) 
 
     app.patch('/payment-success', async (req, res) => {
-  try {
-    const sessionId = req.query.session_id;
-    if (!sessionId) return res.status(400).send({ success: false, message: "Session ID missing" });
+    try {
+      const sessionId = req.query.session_id;
+      if (!sessionId) return res.status(400).send({ success: false, message: "Session ID missing" });
 
-    // Retrieve Stripe session
-    const session = await stripe.checkout.sessions.retrieve(sessionId);
 
-    // Check if payment is completed
-    if (session.payment_status !== 'paid') {
-      return res.send({ success: false, message: "Payment not completed" });
-    }
+      const session = await stripe.checkout.sessions.retrieve(sessionId);
 
-    // Prevent duplicate insert
-    const existingPayment = await paymentCollection.findOne({
-      transactionId: session.payment_intent,
-      userId: session.metadata.userId
 
-    });
+      if (session.payment_status !== 'paid') {
+        return res.send({ success: false, message: "Payment not completed" });
+      }
 
-    if (existingPayment) {
+    
+      const existingPayment = await paymentCollection.findOne({
+        transactionId: session.payment_intent,
+        userId: session.metadata.userId
+
+      });
+
+      if (existingPayment) {
+        return res.send({
+          success: true,
+          message: "Payment already recorded",
+          payment: existingPayment
+        });
+      }
+
+      const bookingId = session.metadata.userId;
+      const query = { _id: new ObjectId(bookingId) };
+      const update = {
+        $set: {
+          paymentStatus: 'paid',
+          paymentAt: new Date()
+        }
+      };
+      const result = await bookingCollection.updateOne(query, update);
+
+    
+      const payment = {
+        amount: session.amount_total / 100,
+        currency: session.currency,
+        userEmail: session.customer_email,
+        userId: session.metadata.userId,
+        userName: session.metadata.userName,
+        serviceName: session.metadata.serviceName,
+        transactionId: session.payment_intent,
+        paymentStatus: session.payment_status,
+        paidAt: new Date(),
+      };
+      const paymentResult = await paymentCollection.insertOne(payment);
+
       return res.send({
         success: true,
-        message: "Payment already recorded",
-        payment: existingPayment
+        message: "Payment recorded successfully",
+        bookingUpdate: result,
+        payment: paymentResult
       });
+
+    } catch (error) {
+      console.log("Payment Error:", error);
+      return res.status(500).send({ success: false, error: error.message });
     }
-
-    const bookingId = session.metadata.userId; // make sure this 
-    const query = { _id: new ObjectId(bookingId) };
-    const update = {
-      $set: {
-        paymentStatus: 'paid',
-        paymentAt: new Date()
-      }
-    };
-    const result = await bookingCollection.updateOne(query, update);
-
-    // Insert payment record
-    const payment = {
-      amount: session.amount_total / 100,
-      currency: session.currency,
-      userEmail: session.customer_email,
-      userId: session.metadata.userId,
-      serviceName: session.serviceName,
-      transactionId: session.payment_intent,
-      paymentStatus: session.payment_status,
-      paidAt: new Date(),
-    };
-    const paymentResult = await paymentCollection.insertOne(payment);
-
-    return res.send({
-      success: true,
-      message: "Payment recorded successfully",
-      bookingUpdate: result,
-      payment: paymentResult
     });
-
-  } catch (error) {
-    console.log("Payment Error:", error);
-    return res.status(500).send({ success: false, error: error.message });
-  }
-});
+    
 
 
 
