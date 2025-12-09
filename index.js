@@ -72,6 +72,7 @@ async function run() {
     const decoratorsCollection = db.collection("decorators");
     const serviceCenterCollection = db.collection("serviceCenter");
     const bookingCollection = db.collection("bookings");
+    const paymentCollection = db.collection("payments");
 
 
     //------------------ users related apis --------------
@@ -211,7 +212,7 @@ async function run() {
               currency: "USD",
               unit_amount: amount,
               product_data: {
-              name: paymentInfo.serviceName,
+              serviceName: paymentInfo.serviceName,
               },
             },
             quantity: 1,
@@ -220,7 +221,8 @@ async function run() {
         customer_email: paymentInfo.userEmail,
          metadata: {
           userId: paymentInfo.userId,
-          serviceName: paymentInfo.userName,
+          userName: paymentInfo.userName,
+          serviceName: paymentInfo.serviceName,
         },
          mode: 'payment',
          success_url: `${process.env.SITE_DOMAIN}/dashboard/payment-history?session_id={CHECKOUT_SESSION_ID}`,
@@ -230,23 +232,70 @@ async function run() {
       res.send({url : session.url})
     }) 
 
-    app.patch('/payment-success' , async (req ,res ) => { 
-        const sessionId = req.query.session_id;
-        const session = await stripe.checkout.sessions.retrieve(sessionId)
-      if(session.payment_status === 'paid') {
-        const id = session.metadata.userId
-        const query = {_id : new ObjectId(id)}
-        const update = {
-            $set : {
-              paymentStatus : 'paid',
-              paymentAt : new Date()
-            }
-        }
-        const result = await bookingCollection.updateOne(query , update)
-        res.send(result)
+    app.patch('/payment-success', async (req, res) => {
+  try {
+    const sessionId = req.query.session_id;
+    if (!sessionId) return res.status(400).send({ success: false, message: "Session ID missing" });
+
+    // Retrieve Stripe session
+    const session = await stripe.checkout.sessions.retrieve(sessionId);
+
+    // Check if payment is completed
+    if (session.payment_status !== 'paid') {
+      return res.send({ success: false, message: "Payment not completed" });
+    }
+
+    // Prevent duplicate insert
+    const existingPayment = await paymentCollection.findOne({
+      transactionId: session.payment_intent,
+      userId: session.metadata.userId
+
+    });
+
+    if (existingPayment) {
+      return res.send({
+        success: true,
+        message: "Payment already recorded",
+        payment: existingPayment
+      });
+    }
+
+    const bookingId = session.metadata.userId; // make sure this 
+    const query = { _id: new ObjectId(bookingId) };
+    const update = {
+      $set: {
+        paymentStatus: 'paid',
+        paymentAt: new Date()
       }
-      res.send({ success : false})
-     })
+    };
+    const result = await bookingCollection.updateOne(query, update);
+
+    // Insert payment record
+    const payment = {
+      amount: session.amount_total / 100,
+      currency: session.currency,
+      userEmail: session.customer_email,
+      userId: session.metadata.userId,
+      serviceName: session.serviceName,
+      transactionId: session.payment_intent,
+      paymentStatus: session.payment_status,
+      paidAt: new Date(),
+    };
+    const paymentResult = await paymentCollection.insertOne(payment);
+
+    return res.send({
+      success: true,
+      message: "Payment recorded successfully",
+      bookingUpdate: result,
+      payment: paymentResult
+    });
+
+  } catch (error) {
+    console.log("Payment Error:", error);
+    return res.status(500).send({ success: false, error: error.message });
+  }
+});
+
 
 
 
