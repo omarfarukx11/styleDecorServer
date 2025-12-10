@@ -92,6 +92,12 @@ async function run() {
       res.send(result);
     });
 
+
+
+
+
+
+
     //------------- services apis ------------
     app.get("/services", async (req, res) => {
       const cursor = servicesCollection
@@ -158,8 +164,6 @@ async function run() {
       res.send(result);
     });
 
-
-
     app.delete('/deleteService/:id' , async (req , res ) => { 
       const id = req.params.id;
       const query = {_id : new ObjectId(id)}
@@ -168,15 +172,54 @@ async function run() {
      })
 
 
+
     // -------------Decorator related Apis --------------
     app.get("/decorators", async (req, res) => {
       const cursor = decoratorsCollection.find().sort({ rating: -1 }).limit(6);
       const result = await cursor.toArray();
       res.send(result);
     });
+    
+
+app.get("/decorators", async (req, res) => {
+  const { status, district } = req.query;
+  const query = {};
+
+  console.log("API Received:", { status, district }); // DEBUG 1
+
+  if (status) {
+    query.status = status; // Matches your decorator.status = "available"
+  }
+  if (district) {
+    query.district = district; // Matches your decorator.district = "Sherpur"
+  }
+
+  console.log(" MongoDB Query:", query); // DEBUG 2
+
+  const cursor = decoratorsCollection.find(query);
+  const result = await cursor.toArray();
+  
+  console.log(" Result Count:", result.length); 
+  console.log(" First Result:", result[0]); 
+  
+  res.send(result);
+});
+
+    
+
+
+
+
+
+
+
+
 
     // booking Related Apis
-
+    app.get('/allBooking' , async (req , res) => { 
+      const cursor = await bookingCollection.find().sort({createAt : - 1}).toArray()
+      res.send(cursor)
+     })
     app.get("/booking", async (req, res) => {
       const email = req.query.email;
       const query = {};
@@ -217,6 +260,11 @@ async function run() {
       const result = await bookingCollection.deleteOne(query);
       res.send(result);
     });
+
+
+
+
+
 
     //------------- payment related apis-------------
     app.get("/payment-history", async (req, res) => {
@@ -291,7 +339,8 @@ async function run() {
         const query = { _id: new ObjectId(bookingId) };
         const update = {
           $set: {
-            paymentStatus: "paid",
+            paymentStatus : "paid",
+            bookingStatus : "Confirmed",
             paymentAt: new Date(),
           },
         };
@@ -321,6 +370,13 @@ async function run() {
         return res.status(500).send({ success: false, error: error.message });
       }
     });
+
+
+
+
+
+
+
 
     // ---------------service center Apis --------------
     app.get("/serviceCenter", async (req, res) => {
