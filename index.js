@@ -113,37 +113,33 @@ async function run() {
       res.send(result);
     });
 
-    app.get("/allServices", async (req, res) => {
-      const {
-        search = "",
-        type = "",
-        minPrice = 0,
-        maxPrice = 500000,
-        limit = 0 ,
-        skip = 0,
-      } = req.query;
+ app.get("/allServices", async (req, res) => {
+  let { search, type, minPrice, maxPrice, page, limit } = req.query;
 
-      const query = {};
+  page = parseInt(page) || 1;
+  limit = parseInt(limit) || 20;
+  const skip = (page - 1) * limit;
 
-      if (search) {
-        query.name = { $regex: search, $options: "i" };
-      }
-      if (type && type !== "All") {
-        query.type = { $regex: type, $options: "i" }
-      }
-      query.price = { $gte: +minPrice, $lte: +maxPrice };
+  const query = {};
 
-      const result = await servicesCollection
-        .find(query)
-        .limit(Number(limit))
-        .skip(Number(skip))
-        .project({description : 0})
-        .sort({ price: 1 })
-        .toArray();
+  if (search) query.name = { $regex: search, $options: "i" };
+  if (type && type !== "All") query.type = { $regex: `^${type}$`, $options: "i" };
+ // ⭐ Fix here
+  if (minPrice) query.price = { ...query.price, $gte: parseInt(minPrice) };
+  if (maxPrice) query.price = { ...query.price, $lte: parseInt(maxPrice) };
 
-      const count = await servicesCollection.countDocuments()
-      res.send({result , total : count});
-    });
+  const total = await servicesCollection.countDocuments(query);
+
+  const result = await servicesCollection
+    .find(query)
+    .skip(skip)
+    .limit(limit)
+    .toArray();
+
+  res.send({ result, total });
+});
+
+
 
     app.get("/servicesDetails/:id", async (req, res) => {
       const id = req.params.id;
