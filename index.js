@@ -108,7 +108,7 @@ async function run() {
 
     //------------- services apis ------------
     app.get("/services", async (req, res) => {
-      const cursor = servicesCollection.find().sort({ rating: -1 }).limit(6);
+      const cursor = servicesCollection.find().project({description : 0}).sort({ rating: -1 }).limit(6);
       const result = await cursor.toArray();
       res.send(result);
     });
@@ -119,6 +119,8 @@ async function run() {
         type = "",
         minPrice = 0,
         maxPrice = 500000,
+        limit = 0 ,
+        skip = 0,
       } = req.query;
 
       const query = {};
@@ -133,10 +135,14 @@ async function run() {
 
       const result = await servicesCollection
         .find(query)
+        .limit(Number(limit))
+        .skip(Number(skip))
+        .project({description : 0})
         .sort({ price: 1 })
-        .limit(10)
         .toArray();
-      res.send(result);
+
+      const count = await servicesCollection.countDocuments()
+      res.send({result , total : count});
     });
 
     app.get("/servicesDetails/:id", async (req, res) => {
