@@ -144,6 +144,29 @@ async function run() {
      })
 
 
+      app.patch("/servicesDetails/:id", async (req, res) => {
+      const id = req.params.id;
+      const updateInfo = req.body;
+      const query = { _id: new ObjectId(id) };
+      const updateDoc = {
+        $set: {
+          ...updateInfo,
+          updatedAt: new Date(),
+        },
+      };
+      const result = await servicesCollection.updateOne(query, updateDoc);
+      res.send(result);
+    });
+
+
+
+    app.delete('/deleteService/:id' , async (req , res ) => { 
+      const id = req.params.id;
+      const query = {_id : new ObjectId(id)}
+      const result = await servicesCollection.deleteOne(query)
+      res.send(result)
+     })
+
 
     // -------------Decorator related Apis --------------
     app.get("/decorators", async (req, res) => {
