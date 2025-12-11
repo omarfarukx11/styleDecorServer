@@ -68,6 +68,7 @@ async function run() {
     const serviceCenterCollection = db.collection("serviceCenter");
     const bookingCollection = db.collection("bookings");
     const paymentCollection = db.collection("payments");
+  
 
     //------------------ users related apis --------------
     app.get("/users/:email/role", async (req, res) => {
@@ -225,7 +226,7 @@ async function run() {
 
     app.patch("/booking/:id", async (req, res) => {
       const id = req.params.id;
-      const updateInfo = req.body;
+      const {updateInfo} = req.body;
       const query = { _id: new ObjectId(id) };
       const updateDoc = {
         $set: {
@@ -236,6 +237,32 @@ async function run() {
       const result = await bookingCollection.updateOne(query, updateDoc);
       res.send(result);
     });
+
+    app.patch('/afterAssign/:id' , async (req, res ) => {
+      const id = req.params.id
+        const {decoratorName ,decoratorEmail, decoratorId , serviceId} = req.body
+        const query = {_id : new ObjectId(id)}
+        const updateDoc = {
+          $set : {
+            decoratorName : decoratorName,
+            decoratorEmail : decoratorEmail,
+            decoratorId   : decoratorId,
+            decoratorStatus : "decorator Assigned"
+          }
+        }
+        const result = await bookingCollection.updateOne(query, updateDoc)
+        res.send(result)
+
+        const decoratorQuery = {_id : new ObjectId(decoratorId)}
+        const updateDecoratorsDoc = {
+          $set: {
+           serviceId : serviceId,
+           status : "On Service",
+          }
+        }
+        const decoratorResult = await decoratorsCollection.updateOne(decoratorQuery , updateDecoratorsDoc)
+        res.send(decoratorResult)
+    })
 
     app.delete("/booking/:id", async (req, res) => {
       const id = req.params.id;
