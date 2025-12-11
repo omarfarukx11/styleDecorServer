@@ -76,7 +76,6 @@ async function run() {
       const user = await usersCollection.findOne(query);
       res.send({ role: user?.role || "user" });
     });
-
     app.post("/users", async (req, res) => {
       const user = req.body;
       const email = user.email;
@@ -91,8 +90,6 @@ async function run() {
       const result = usersCollection.insertOne(user);
       res.send(result);
     });
-
-
 
 
 
@@ -142,15 +139,14 @@ async function run() {
       res.send(result);
     });
 
-    app.post('/newServices' , async (req ,res ) => { 
+    app.post("/newServices", async (req, res) => {
       const newService = req.body;
-      newService.createAt = new Date()
-      const result = await servicesCollection.insertOne(newService)
-      res.send(result)
-     })
+      newService.createAt = new Date();
+      const result = await servicesCollection.insertOne(newService);
+      res.send(result);
+    });
 
-
-      app.patch("/servicesDetails/:id", async (req, res) => {
+    app.patch("/servicesDetails/:id", async (req, res) => {
       const id = req.params.id;
       const updateInfo = req.body;
       const query = { _id: new ObjectId(id) };
@@ -164,12 +160,13 @@ async function run() {
       res.send(result);
     });
 
-    app.delete('/deleteService/:id' , async (req , res ) => { 
+    app.delete("/deleteService/:id", async (req, res) => {
       const id = req.params.id;
-      const query = {_id : new ObjectId(id)}
-      const result = await servicesCollection.deleteOne(query)
-      res.send(result)
-     })
+      const query = { _id: new ObjectId(id) };
+      const result = await servicesCollection.deleteOne(query);
+      res.send(result);
+    });
+
 
 
 
@@ -179,47 +176,32 @@ async function run() {
       const result = await cursor.toArray();
       res.send(result);
     });
-    
 
-app.get("/decorators", async (req, res) => {
-  const { status, district } = req.query;
-  const query = {};
-
-  console.log("API Received:", { status, district }); // DEBUG 1
-
-  if (status) {
-    query.status = status; // Matches your decorator.status = "available"
-  }
-  if (district) {
-    query.district = district; // Matches your decorator.district = "Sherpur"
-  }
-
-  console.log(" MongoDB Query:", query); // DEBUG 2
-
-  const cursor = decoratorsCollection.find(query);
-  const result = await cursor.toArray();
-  
-  console.log(" Result Count:", result.length); 
-  console.log(" First Result:", result[0]); 
-  
-  res.send(result);
-});
-
-    
-
-
-
-
-
+    app.get('/assignDecorators', async (req, res) => {
+            const {status,district} = req.query;
+            const query = {}
+            if(status) {
+              query.status = status
+            }
+            if(district) {
+              query.district = district
+            }
+            const cursor = decoratorsCollection.find(query)
+            const result = await cursor.toArray();
+            res.send(result);
+        })
 
 
 
 
     // booking Related Apis
-    app.get('/allBooking' , async (req , res) => { 
-      const cursor = await bookingCollection.find().sort({createAt : - 1}).toArray()
-      res.send(cursor)
-     })
+    app.get("/allBooking", async (req, res) => {
+      const cursor = await bookingCollection
+        .find()
+        .sort({ createAt: -1 })
+        .toArray();
+      res.send(cursor);
+    });
     app.get("/booking", async (req, res) => {
       const email = req.query.email;
       const query = {};
@@ -236,6 +218,7 @@ app.get("/decorators", async (req, res) => {
     app.post("/booking", async (req, res) => {
       const book = req.body;
       book.createAt = new Date();
+      book.decoratorStatus = "Not Assign";
       const result = await bookingCollection.insertOne(book);
       res.send(result);
     });
@@ -260,8 +243,6 @@ app.get("/decorators", async (req, res) => {
       const result = await bookingCollection.deleteOne(query);
       res.send(result);
     });
-
-
 
 
 
@@ -339,8 +320,9 @@ app.get("/decorators", async (req, res) => {
         const query = { _id: new ObjectId(bookingId) };
         const update = {
           $set: {
-            paymentStatus : "paid",
-            bookingStatus : "Confirmed",
+            paymentStatus: "paid",
+            bookingStatus: "Confirmed",
+            decoratorStatus : "Assign Pending",
             paymentAt: new Date(),
           },
         };
@@ -375,15 +357,15 @@ app.get("/decorators", async (req, res) => {
 
 
 
-
-
-
     // ---------------service center Apis --------------
     app.get("/serviceCenter", async (req, res) => {
       const cursor = serviceCenterCollection.find();
       const result = await cursor.toArray();
       res.send(result);
     });
+
+
+
 
     await client.db("admin").command({ ping: 1 });
     console.log(
