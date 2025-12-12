@@ -106,6 +106,8 @@ async function run() {
       res.send(result);
     });
 
+
+
     //------------- services apis ------------
     app.get("/services", async (req, res) => {
       const cursor = servicesCollection
@@ -178,6 +180,14 @@ async function run() {
       res.send(result);
     });
 
+
+
+
+
+
+
+
+
     // -------------Decorator related Apis --------------
     app.get("/topDecorators", async (req, res) => {
       const cursor = decoratorsCollection.find().sort({ rating: -1 }).limit(6);
@@ -225,12 +235,20 @@ async function run() {
       res.send(result);
     });
 
+
     app.delete("/deleteDecorators/:id", async (req, res) => {
       const id = req.params.id;
       const query = { _id: new ObjectId(id) };
       const result = await decoratorsCollection.deleteOne(query);
       res.send(result);
     });
+
+
+
+
+
+
+
 
     // booking Related Apis
 
@@ -293,7 +311,7 @@ async function run() {
 
     app.patch("/afterAssign/:id", async (req, res) => {
       const id = req.params.id;
-      const { decoratorName, decoratorEmail, decoratorId, serviceId } =
+      const { decoratorName, decoratorEmail, decoratorId, serviceId ,bookingRegion ,bookingDistrict } =
         req.body;
       const query = { _id: new ObjectId(id) };
       const updateDoc = {
@@ -302,10 +320,11 @@ async function run() {
           decoratorEmail: decoratorEmail,
           decoratorId: decoratorId,
           decoratorStatus: "decorator Assigned",
+          bookingRegion : bookingRegion,
+          bookingDistrict : bookingDistrict,
         },
       };
       const result = await bookingCollection.updateOne(query, updateDoc);
-      res.send(result);
 
       const decoratorQuery = { _id: new ObjectId(decoratorId) };
       const updateDecoratorsDoc = {
@@ -318,7 +337,7 @@ async function run() {
         decoratorQuery,
         updateDecoratorsDoc
       );
-      res.send(decoratorResult);
+      res.send(result , decoratorResult);
     });
 
     app.delete("/booking/:id", async (req, res) => {
@@ -328,7 +347,9 @@ async function run() {
       res.send(result);
     });
 
-    //-------------
+    
+
+
 
     // payment related apis-------------
     app.get("/payment-history", async (req, res) => {
