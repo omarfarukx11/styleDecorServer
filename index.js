@@ -70,7 +70,7 @@ async function run() {
     const paymentCollection = db.collection("payments");
 
     //------------------ users related apis --------------
-    app.get("/users/:email", async (req, res) => {
+    app.get("/users/:email/role", async (req, res) => {
       const email = req.params.email;
       const query = { email };
       const user = await usersCollection.findOne(query);
@@ -225,9 +225,30 @@ async function run() {
       res.send(result);
     });
 
+    app.get("/decorator/:email", async (req, res) => {
+      const email = req.params.email;
+      const query = { email };
+      const user = await decoratorsCollection.findOne(query);
+      res.send(user);
+    });
+
     app.post("/decorators", async (req, res) => {
       const decorator = req.body;
       const result = await decoratorsCollection.insertOne(decorator);
+      res.send(result);
+    });
+
+    // --------------need word
+    app.patch("/updateDecoratorsStatus/:id", async (req, res) => {
+      const id = req.params.id;
+      const { status } = req.body;
+      const query = { _id: new ObjectId(id) };
+      const updateDoc = {
+        $set: {
+          status: status,
+        },
+      };
+      const result = await decoratorsCollection.updateOne(query, updateDoc);
       res.send(result);
     });
 
@@ -239,7 +260,6 @@ async function run() {
     });
 
     // booking Related Apis
-
     app.get("/allBooking", async (req, res) => {
       let { page, limit } = req.query;
       page = parseInt(page) || 1;
@@ -275,13 +295,10 @@ async function run() {
       res.send(cursor);
     });
 
-    app.get("/decorator/bookings", async (req, res) => {
-      const { decoratorId } = req.query;
+    app.get("/booking/:email", async (req, res) => {
+      const email = req.params.email;
+      const query = { decoratorEmail: email };
 
-      if (!decoratorId)
-        return res.status(400).send({ error: "Decorator ID required" });
-
-      const query = { decoratorId };
       const bookings = await bookingCollection.find(query).toArray();
       res.send(bookings);
     });
@@ -317,6 +334,7 @@ async function run() {
         serviceId,
         bookingRegion,
         bookingDistrict,
+        decoratorID,
       } = req.body;
       const query = { _id: new ObjectId(id) };
       const updateDoc = {
@@ -330,8 +348,8 @@ async function run() {
         },
       };
       const result = await bookingCollection.updateOne(query, updateDoc);
-
-      const decoratorQuery = { _id: new ObjectId(decoratorId) };
+      res.send(result);
+      const decoratorQuery = { _id: new ObjectId(decoratorID) };
       const updateDecoratorsDoc = {
         $set: {
           serviceId: serviceId,
@@ -342,21 +360,21 @@ async function run() {
         decoratorQuery,
         updateDecoratorsDoc
       );
-      res.send(result, decoratorResult);
+      res.send(decoratorResult);
     });
 
-    app.patch("/booking/:id", async (req, res) => {
+    app.patch("/booking/:id/status", async (req, res) => {
       const id = req.params.id;
-      const query = {_id : new ObjectId(id)}
+      const query = { _id: new ObjectId(id) };
       const updateDoc = {
-        $set : {
-          decoratorStatus : req.body.decoratorStatus,
-        }
-      }
-      const result = await bookingCollection.updateOne(query ,  updateDoc)
+        $set: {
+          decoratorStatus: req.body.decoratorStatus,
+        },
+      };
+      const result = await bookingCollection.updateOne(query, updateDoc);
+
       res.send(result);
     });
-
 
     app.delete("/booking/:id", async (req, res) => {
       const id = req.params.id;
@@ -364,9 +382,6 @@ async function run() {
       const result = await bookingCollection.deleteOne(query);
       res.send(result);
     });
-
-
-
 
     // payment related apis-------------
     app.get("/payment-history", async (req, res) => {
