@@ -5,7 +5,7 @@ require("dotenv").config();
 const port = process.env.PORT || 3000;
 const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb");
 const stripe = require("stripe")(process.env.STRIPE);
-// mongoDB Connection
+
 const uri = `mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASS}@cluster0.oyyjehq.mongodb.net/?appName=Cluster0`;
 
 // middleWare
@@ -19,7 +19,7 @@ admin.initializeApp({
     type: process.env.FIREBASE_TYPE,
     project_id: process.env.FIREBASE_PROJECT_ID,
     private_key_id: process.env.FIREBASE_PRIVATE_KEY_ID,
-    private_key: process.env.FIREBASE_PRIVATE_KEY.replace(/\\n/g, "\n"), // important
+    private_key: process.env.FIREBASE_PRIVATE_KEY.replace(/\\n/g, "\n"),
     client_email: process.env.FIREBASE_CLIENT_EMAIL,
     client_id: process.env.FIREBASE_CLIENT_ID,
     auth_uri: process.env.FIREBASE_AUTH_URI,
@@ -38,7 +38,7 @@ const verifyFBToken = async (req, res, next) => {
 
   try {
     const idToken = token.split(" ")[1];
-    const decoded = await admin.auth().verifyIdToken(token);
+    const decoded = await admin.auth().verifyIdToken(idToken);
     req.decoded_email = decoded.email;
   } catch (err) {
     return res.status(401).send({ message: "unauthorize access" });
@@ -70,24 +70,52 @@ async function run() {
     const paymentCollection = db.collection("payments");
     const earningCollection = db.collection("earning");
 
+    const verifyAdmin = async (req, res, next) => {
+      const email = req.decoded_email;
+      const query = { email };
+      const user = await usersCollection.findOne(query);
+
+      if (!user || user.role !== "admin") {
+        return res.status(403), send({ message: "forbidden access" });
+      }
+      next();
+    };
+
+    const verifyDecorator = async (req, res, next) => {
+      const email = req.decoded_email;
+      const query = { email };
+      const user = await usersCollection.findOne(query);
+
+      if (!user || user.role !== "decorator") {
+        return res.status(403).send({ message: "forbidden access" });
+      }
+
+      next();
+    };
+
     //------------------ users related apis --------------
-    app.get("/users/:email/role", async (req, res) => {
+    app.get("/users/:email/role", verifyFBToken, async (req, res) => {
       const email = req.params.email;
+      if (email !== req.decoded_email) {
+        return res.status(403).send({ message: "forbidden access" });
+      }
       const query = { email };
       const user = await usersCollection.findOne(query);
       res.send({ role: user?.role || "user" });
     });
-    app.get("/user/:email", async (req, res) => {
+
+    app.get("/user/:email", verifyFBToken, async (req, res) => {
       const email = req.params.email;
       const query = { email };
       const user = await usersCollection.findOne(query);
       res.send(user);
     });
-    app.get("/users", async (req, res) => {
+    app.get("/users", verifyFBToken, async (req, res) => {
       const query = { role: "user" };
       const users = await usersCollection.find(query).toArray();
       res.send(users);
     });
+
     app.post("/users", async (req, res) => {
       const user = req.body;
       const email = user.email;
@@ -102,7 +130,8 @@ async function run() {
       const result = usersCollection.insertOne(user);
       res.send(result);
     });
-    app.patch("/users/:id", async (req, res) => {
+    
+    app.patch("/users/:id", verifyFBToken, async (req, res) => {
       const id = req.params.id;
       const filter = { _id: new ObjectId(id) };
       const updateDoc = {
@@ -113,8 +142,10 @@ async function run() {
       res.send(result);
     });
 
+
+
     //------------- services apis ------------
-    app.get("/services", async (req, res) => {
+    app.get("/services", verifyFBToken, async (req, res) => {
       const cursor = servicesCollection
         .find()
         .project({ description: 0 })
@@ -124,7 +155,7 @@ async function run() {
       res.send(result);
     });
 
-    app.get("/allServices", async (req, res) => {
+    app.get("/allServices", verifyFBToken, async (req, res) => {
       let { search, type, minPrice, maxPrice, page, limit } = req.query;
 
       page = parseInt(page) || 1;
@@ -150,21 +181,21 @@ async function run() {
       res.send({ result, total });
     });
 
-    app.get("/servicesDetails/:id", async (req, res) => {
+    app.get("/servicesDetails/:id", verifyFBToken, async (req, res) => {
       const id = req.params.id;
       const query = { _id: new ObjectId(id) };
       const result = await servicesCollection.findOne(query);
       res.send(result);
     });
 
-    app.post("/newServices", async (req, res) => {
+    app.post("/newServices", verifyFBToken, async (req, res) => {
       const newService = req.body;
       newService.createAt = new Date();
       const result = await servicesCollection.insertOne(newService);
       res.send(result);
     });
 
-    app.patch("/servicesDetails/:id", async (req, res) => {
+    app.patch("/servicesDetails/:id", verifyFBToken, async (req, res) => {
       const id = req.params.id;
       const updateInfo = req.body;
       const query = { _id: new ObjectId(id) };
@@ -178,21 +209,25 @@ async function run() {
       res.send(result);
     });
 
-    app.delete("/deleteService/:id", async (req, res) => {
+    app.delete("/deleteService/:id", verifyFBToken, async (req, res) => {
       const id = req.params.id;
       const query = { _id: new ObjectId(id) };
       const result = await servicesCollection.deleteOne(query);
       res.send(result);
     });
 
+
+
+
+
     // -------------Decorator related Apis --------------
-    app.get("/topDecorators", async (req, res) => {
+    app.get("/topDecorators", verifyFBToken, async (req, res) => {
       const cursor = decoratorsCollection.find().sort({ rating: -1 }).limit(6);
       const result = await cursor.toArray();
       res.send(result);
     });
 
-    app.get("/allDecorators", async (req, res) => {
+    app.get("/allDecorators", verifyFBToken, async (req, res) => {
       let { page, limit } = req.query;
       page = parseInt(page) || 1;
       limit = parseInt(limit) || 20;
@@ -212,7 +247,7 @@ async function run() {
       }
     });
 
-    app.get("/assignDecorators", async (req, res) => {
+    app.get("/assignDecorators", verifyFBToken, async (req, res) => {
       const { status, district } = req.query;
       const query = {};
       if (status) {
@@ -225,32 +260,36 @@ async function run() {
       const result = await cursor.toArray();
       res.send(result);
     });
-    app.get("/decorator/:email", async (req, res) => {
+    app.get("/decorator/:email", verifyFBToken, async (req, res) => {
       const email = req.params.email;
       const query = { email };
       const user = await decoratorsCollection.findOne(query);
       res.send(user);
     });
 
-    app.post("/decorators", async (req, res) => {
+    app.post("/decorators", verifyFBToken, async (req, res) => {
       const decorator = req.body;
       const result = await decoratorsCollection.insertOne(decorator);
       res.send(result);
     });
 
-    app.patch("/updateDecoratorsWorkStatus/:id", async (req, res) => {
-      const id = req.params.id;
-      const { status } = req.body;
-      const query = { _id : new ObjectId(id) };
-      const updateDoc = {
-        $set: {
-          status: status,
-        },
-      };
+    app.patch(
+      "/updateDecoratorsWorkStatus/:id",
+      verifyFBToken, 
+      async (req, res) => {
+        const id = req.params.id;
+        const { status } = req.body;
+        const query = { _id: new ObjectId(id) };
+        const updateDoc = {
+          $set: {
+            status: status,
+          },
+        };
 
-      const result = await decoratorsCollection.updateOne(query, updateDoc);
-      res.send(result);
-    });
+        const result = await decoratorsCollection.updateOne(query, updateDoc);
+        res.send(result);
+      }
+    );
 
     app.delete("/deleteDecorators/:id", async (req, res) => {
       const id = req.params.id;
@@ -261,27 +300,21 @@ async function run() {
 
 
     //// ----------------decorator earning api
-app.get("/decorator-earnings/:email", async (req, res) => {
-  const email = req.params.email;
-  const query = {}
-  if(email) {
-    query.decoratorEmail = email
-  }
-  const earnings = await earningCollection
-    .find(query)
-    .toArray();
-  res.send(earnings);
-});
-
-
-
-
+    app.get("/decorator-earnings/:email", verifyFBToken, verifyDecorator, async (req, res) => {
+      const email = req.params.email;
+      const query = {};
+      if (email) {
+        query.decoratorEmail = email;
+      }
+      const earnings = await earningCollection.find(query).toArray();
+      res.send(earnings);
+    });
 
 
 
 
     // booking Related Apis
-    app.get("/allBooking", async (req, res) => {
+    app.get("/allBooking", verifyFBToken, verifyAdmin , async (req, res) => {
       let { page, limit } = req.query;
       page = parseInt(page) || 1;
       limit = parseInt(limit) || 20;
@@ -303,7 +336,7 @@ app.get("/decorator-earnings/:email", async (req, res) => {
       }
     });
 
-    app.get("/booking", async (req, res) => {
+    app.get("/booking", verifyFBToken, async (req, res) => {
       const email = req.query.email;
       const query = {};
       if (email) {
@@ -313,10 +346,10 @@ app.get("/decorator-earnings/:email", async (req, res) => {
         .find(query)
         .sort({ createAt: -1 })
         .toArray();
-      res.send(cursor);
+        res.send(cursor);
     });
 
-    app.get("/booking/:email", async (req, res) => {
+    app.get("/booking/:email", verifyFBToken, verifyDecorator, async (req, res) => {
       const email = req.params.email;
       const query = { decoratorEmail: email };
 
@@ -324,7 +357,7 @@ app.get("/decorator-earnings/:email", async (req, res) => {
       res.send(bookings);
     });
 
-    app.post("/booking", async (req, res) => {
+    app.post("/booking", verifyFBToken, async (req, res) => {
       const book = req.body;
       book.createAt = new Date();
       book.decoratorStatus = "Not Assign";
@@ -332,7 +365,7 @@ app.get("/decorator-earnings/:email", async (req, res) => {
       res.send(result);
     });
 
-    app.patch("/booking/:id", async (req, res) => {
+    app.patch("/booking/:id", verifyFBToken, async (req, res) => {
       const id = req.params.id;
       const { updateInfo } = req.body;
       const query = { _id: new ObjectId(id) };
@@ -346,7 +379,7 @@ app.get("/decorator-earnings/:email", async (req, res) => {
       res.send(result);
     });
 
-    app.patch("/afterAssign/:id", async (req, res) => {
+    app.patch("/afterAssign/:id",verifyFBToken ,verifyAdmin,  async (req, res) => {
       const id = req.params.id;
       const {
         decoratorName,
@@ -384,38 +417,37 @@ app.get("/decorator-earnings/:email", async (req, res) => {
       res.send(decoratorResult);
     });
 
-    app.patch("/booking/:id/status", async (req, res) => {
-  const id = req.params.id;
-  const query = { _id: new ObjectId(id) };
+    app.patch("/booking/:id/status", verifyFBToken, verifyDecorator, async (req, res) => {
+      const id = req.params.id;
+      const query = { _id: new ObjectId(id) };
 
+      const booking = await bookingCollection.findOne(query);
 
-  const booking = await bookingCollection.findOne(query);
+      const updateDoc = {
+        $set: {
+          decoratorStatus: req.body.decoratorStatus,
+        },
+      };
 
-  const updateDoc = {
-    $set: {
-      decoratorStatus: req.body.decoratorStatus,
-    },
-  };
+      const result = await bookingCollection.updateOne(query, updateDoc);
 
-  const result = await bookingCollection.updateOne(query, updateDoc);
+      if (req.body.decoratorStatus === "completed") {
+        const percent = 0.3;
+        const earningAmount = booking.serviceCost * percent;
+        await earningCollection.insertOne({
+          decoratorEmail: booking.decoratorEmail,
+          amount: earningAmount,
+          serviceName: booking.serviceName,
+          clientEmail: booking.userEmail,
+          bookingId: booking._id,
+          date: new Date(),
+        });
+      }
 
-  if (req.body.decoratorStatus === "completed") {
-    const percent = 0.3;
-    const earningAmount = booking.serviceCost * percent;
-    await earningCollection.insertOne({
-      decoratorEmail: booking.decoratorEmail,
-      amount: earningAmount,
-      serviceName: booking.serviceName,     
-      clientEmail: booking.userEmail,        
-      bookingId: booking._id,
-      date: new Date(),
+      res.send(result);
     });
-  }
 
-  res.send(result);
-    });
-
-    app.delete("/booking/:id", async (req, res) => {
+    app.delete("/booking/:id", verifyFBToken, async (req, res) => {
       const id = req.params.id;
       const query = { _id: new ObjectId(id) };
       const result = await bookingCollection.deleteOne(query);
@@ -425,9 +457,8 @@ app.get("/decorator-earnings/:email", async (req, res) => {
 
 
 
-
     // payment related apis-------------
-    app.get("/payment-history", async (req, res) => {
+    app.get("/payment-history", verifyFBToken, async (req, res) => {
       const email = req.query.email;
       const query = {};
       if (email) {
@@ -439,7 +470,7 @@ app.get("/decorator-earnings/:email", async (req, res) => {
         .toArray();
       res.send(result);
     });
-    app.post("/create-checkout-session", async (req, res) => {
+    app.post("/create-checkout-session", verifyFBToken, async (req, res) => {
       const paymentInfo = req.body;
       const amount = parseInt(paymentInfo.cost) * 100;
       const session = await stripe.checkout.sessions.create({
@@ -468,7 +499,7 @@ app.get("/decorator-earnings/:email", async (req, res) => {
       res.send({ url: session.url });
     });
 
-    app.patch("/payment-success", async (req, res) => {
+    app.patch("/payment-success", verifyFBToken, async (req, res) => {
       try {
         const sessionId = req.query.session_id;
         if (!sessionId)
@@ -532,8 +563,10 @@ app.get("/decorator-earnings/:email", async (req, res) => {
       }
     });
 
+
+
     // ---------------service center Apis --------------
-    app.get("/serviceCenter", async (req, res) => {
+    app.get("/serviceCenter", verifyFBToken, async (req, res) => {
       const cursor = serviceCenterCollection.find();
       const result = await cursor.toArray();
       res.send(result);
