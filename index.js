@@ -14,18 +14,18 @@ app.use(cors());
 
 var admin = require("firebase-admin");
 
-const decoded = Buffer.from(process.env.FB_SERVICE_KEY, 'base64').toString('utf8')
+const decoded = Buffer.from(process.env.FB_SERVICE_KEY, "base64").toString(
+  "utf8"
+);
 const serviceAccount = JSON.parse(decoded);
 
-
 admin.initializeApp({
-  credential: admin.credential.cert(serviceAccount)
+  credential: admin.credential.cert(serviceAccount),
 });
-
 
 const verifyFBToken = async (req, res, next) => {
   const token = req.headers?.authorization;
-  console.log(req.headers)
+  console.log(req.headers);
   if (!token) {
     return res.status(401).send({ message: "unauthorize access" });
   }
@@ -33,7 +33,7 @@ const verifyFBToken = async (req, res, next) => {
   try {
     const idToken = token.split(" ")[1];
     const decoded = await admin.auth().verifyIdToken(idToken);
-    
+
     req.decoded_email = decoded.email;
   } catch (err) {
     return res.status(401).send({ message: "unauthorize access" });
@@ -41,8 +41,6 @@ const verifyFBToken = async (req, res, next) => {
 
   next();
 };
-
-
 
 app.get("/", (req, res) => {
   res.send("lets begin");
@@ -65,9 +63,9 @@ async function run() {
     const decoratorsCollection = db.collection("decorators");
     const serviceCenterCollection = db.collection("serviceCenter");
     const bookingCollection = db.collection("bookings");
-    const paymentCollection = db.collection("payments");
+    const paymentCollection = db.collection("payments").createIndex({ transactionId: 1 }, { unique: true })
     const earningCollection = db.collection("earning");
-
+    // 
     const verifyAdmin = async (req, res, next) => {
       const email = req.decoded_email;
       const query = { email };
@@ -97,7 +95,7 @@ async function run() {
       if (email !== req.decoded_email) {
         return res.status(403).send({ message: "forbidden access" });
       }
-      
+
       const query = { email };
       const user = await usersCollection.findOne(query);
       res.send({ role: user?.role || "user" });
@@ -129,7 +127,7 @@ async function run() {
       const result = usersCollection.insertOne(user);
       res.send(result);
     });
-    
+
     app.patch("/users/:id", verifyFBToken, async (req, res) => {
       const id = req.params.id;
       const filter = { _id: new ObjectId(id) };
@@ -140,8 +138,6 @@ async function run() {
       const result = await usersCollection.updateOne(filter, updateDoc);
       res.send(result);
     });
-
-
 
     //------------- services apis ------------
     app.get("/services", async (req, res) => {
@@ -215,10 +211,6 @@ async function run() {
       res.send(result);
     });
 
-
-
-
-
     // -------------Decorator related Apis --------------
     app.get("/topDecorators", async (req, res) => {
       const cursor = decoratorsCollection.find().sort({ rating: -1 }).limit(6);
@@ -274,7 +266,7 @@ async function run() {
 
     app.patch(
       "/updateDecoratorsWorkStatus/:id",
-      verifyFBToken, 
+      verifyFBToken,
       async (req, res) => {
         const id = req.params.id;
         const { status } = req.body;
@@ -297,23 +289,24 @@ async function run() {
       res.send(result);
     });
 
-
     //// ----------------decorator earning api
-    app.get("/decorator-earnings/:email", verifyFBToken, verifyDecorator, async (req, res) => {
-      const email = req.params.email;
-      const query = {};
-      if (email) {
-        query.decoratorEmail = email;
+    app.get(
+      "/decorator-earnings/:email",
+      verifyFBToken,
+      verifyDecorator,
+      async (req, res) => {
+        const email = req.params.email;
+        const query = {};
+        if (email) {
+          query.decoratorEmail = email;
+        }
+        const earnings = await earningCollection.find(query).toArray();
+        res.send(earnings);
       }
-      const earnings = await earningCollection.find(query).toArray();
-      res.send(earnings);
-    });
-
-
-
+    );
 
     // booking Related Apis
-    app.get("/allBooking", verifyFBToken, verifyAdmin , async (req, res) => {
+    app.get("/allBooking", verifyFBToken, verifyAdmin, async (req, res) => {
       let { page, limit } = req.query;
       page = parseInt(page) || 1;
       limit = parseInt(limit) || 20;
@@ -345,16 +338,21 @@ async function run() {
         .find(query)
         .sort({ createAt: -1 })
         .toArray();
-        res.send(cursor);
+      res.send(cursor);
     });
 
-    app.get("/booking/:email", verifyFBToken, verifyDecorator, async (req, res) => {
-      const email = req.params.email;
-      const query = { decoratorEmail: email };
+    app.get(
+      "/booking/:email",
+      verifyFBToken,
+      verifyDecorator,
+      async (req, res) => {
+        const email = req.params.email;
+        const query = { decoratorEmail: email };
 
-      const bookings = await bookingCollection.find(query).toArray();
-      res.send(bookings);
-    });
+        const bookings = await bookingCollection.find(query).toArray();
+        res.send(bookings);
+      }
+    );
 
     app.post("/booking", verifyFBToken, async (req, res) => {
       const book = req.body;
@@ -378,73 +376,83 @@ async function run() {
       res.send(result);
     });
 
-    app.patch("/afterAssign/:id",verifyFBToken ,verifyAdmin,  async (req, res) => {
-      const id = req.params.id;
-      const {
-        decoratorName,
-        decoratorEmail,
-        decoratorId,
-        serviceId,
-        bookingRegion,
-        bookingDistrict,
-        decoratorID,
-      } = req.body;
-      const query = { _id: new ObjectId(id) };
-      const updateDoc = {
-        $set: {
-          decoratorName: decoratorName,
-          decoratorEmail: decoratorEmail,
-          decoratorId: decoratorId,
-          decoratorStatus: "decorator Assigned",
-          bookingRegion: bookingRegion,
-          bookingDistrict: bookingDistrict,
-        },
-      };
-      const result = await bookingCollection.updateOne(query, updateDoc);
-      res.send(result);
-      const decoratorQuery = { _id: new ObjectId(decoratorID) };
-      const updateDecoratorsDoc = {
-        $set: {
-          serviceId: serviceId,
-          status: "On Service",
-        },
-      };
-      const decoratorResult = await decoratorsCollection.updateOne(
-        decoratorQuery,
-        updateDecoratorsDoc
-      );
-      res.send(decoratorResult);
-    });
-
-    app.patch("/booking/:id/status", verifyFBToken, verifyDecorator, async (req, res) => {
-      const id = req.params.id;
-      const query = { _id: new ObjectId(id) };
-
-      const booking = await bookingCollection.findOne(query);
-
-      const updateDoc = {
-        $set: {
-          decoratorStatus: req.body.decoratorStatus,
-        },
-      };
-
-      const result = await bookingCollection.updateOne(query, updateDoc);
-
-      if (req.body.decoratorStatus === "completed") {
-        const percent = 0.3;
-        const earningAmount = booking.serviceCost * percent;
-        await earningCollection.insertOne({
-          decoratorEmail: booking.decoratorEmail,
-          amount: earningAmount,
-          serviceName: booking.serviceName,
-          clientEmail: booking.userEmail,
-          bookingId: booking._id,
-          date: new Date(),
-        });
+    app.patch(
+      "/afterAssign/:id",
+      verifyFBToken,
+      verifyAdmin,
+      async (req, res) => {
+        const id = req.params.id;
+        const {
+          decoratorName,
+          decoratorEmail,
+          decoratorId,
+          serviceId,
+          bookingRegion,
+          bookingDistrict,
+          decoratorID,
+        } = req.body;
+        const query = { _id: new ObjectId(id) };
+        const updateDoc = {
+          $set: {
+            decoratorName: decoratorName,
+            decoratorEmail: decoratorEmail,
+            decoratorId: decoratorId,
+            decoratorStatus: "decorator Assigned",
+            bookingRegion: bookingRegion,
+            bookingDistrict: bookingDistrict,
+          },
+        };
+        const result = await bookingCollection.updateOne(query, updateDoc);
+        res.send(result);
+        const decoratorQuery = { _id: new ObjectId(decoratorID) };
+        const updateDecoratorsDoc = {
+          $set: {
+            serviceId: serviceId,
+            status: "On Service",
+          },
+        };
+        const decoratorResult = await decoratorsCollection.updateOne(
+          decoratorQuery,
+          updateDecoratorsDoc
+        );
+        res.send(decoratorResult);
       }
+    );
 
-      res.send(result);
-    });
+    app.patch(
+      "/booking/:id/status",
+      verifyFBToken,
+      verifyDecorator,
+      async (req, res) => {
+        const id = req.params.id;
+        const query = { _id: new ObjectId(id) };
+
+        const booking = await bookingCollection.findOne(query);
+
+        const updateDoc = {
+          $set: {
+            decoratorStatus: req.body.decoratorStatus,
+          },
+        };
+
+        const result = await bookingCollection.updateOne(query, updateDoc);
+
+        if (req.body.decoratorStatus === "completed") {
+          const percent = 0.3;
+          const earningAmount = booking.serviceCost * percent;
+          await earningCollection.insertOne({
+            decoratorEmail: booking.decoratorEmail,
+            amount: earningAmount,
+            serviceName: booking.serviceName,
+            clientEmail: booking.userEmail,
+            bookingId: booking._id,
+            date: new Date(),
+          });
+        }
+
+        res.send(result);
+      }
+    );
 
     app.delete("/booking/:id", verifyFBToken, async (req, res) => {
       const id = req.params.id;
@@ -452,9 +460,6 @@ async function run() {
       const result = await bookingCollection.deleteOne(query);
       res.send(result);
     });
-
-
-
 
     // payment related apis-------------
     app.get("/payment-history", verifyFBToken, async (req, res) => {
@@ -469,7 +474,7 @@ async function run() {
         .toArray();
       res.send(result);
     });
-    app.post("/create-checkout-session",  async (req, res) => {
+    app.post("/create-checkout-session", async (req, res) => {
       const paymentInfo = req.body;
       const amount = parseInt(paymentInfo.cost) * 100;
       const session = await stripe.checkout.sessions.create({
@@ -498,7 +503,71 @@ async function run() {
       res.send({ url: session.url });
     });
 
-    app.patch("/payment-success", verifyFBToken,  async (req, res) => {
+    // app.patch("/payment-success", verifyFBToken,  async (req, res) => {
+    //   try {
+    //     const sessionId = req.query.session_id;
+    //     if (!sessionId)
+    //       return res
+    //         .status(400)
+    //         .send({ success: false, message: "Session ID missing" });
+
+    //     const session = await stripe.checkout.sessions.retrieve(sessionId);
+
+    //     if (session.payment_status !== "paid") {
+    //       return res.send({ success: false, message: "Payment not completed" });
+    //     }
+
+    //     const existingPayment = await paymentCollection.findOne({
+    //       transactionId: session.payment_intent,
+    //       userId: session.metadata.userId,
+    //     });
+
+    //     if (existingPayment) {
+    //       return res.send({
+    //         success: true,
+    //         message: "Payment already recorded",
+    //         payment: existingPayment,
+    //       });
+    //     }
+
+    //     const bookingId = session.metadata.userId;
+    //     const query = { _id: new ObjectId(bookingId) };
+    //     const update = {
+    //       $set: {
+    //         paymentStatus: "paid",
+    //         bookingStatus: "Confirmed",
+    //         decoratorStatus: "Assign Pending",
+    //         paymentAt: new Date(),
+    //       },
+    //     };
+    //     const result = await bookingCollection.updateOne(query, update);
+
+    //     const payment = {
+    //       amount: session.amount_total / 100,
+    //       currency: session.currency,
+    //       userEmail: session.customer_email,
+    //       userId: session.metadata.userId,
+    //       userName: session.metadata.userName,
+    //       serviceName: session.metadata.serviceName,
+    //       transactionId: session.payment_intent,
+    //       paymentStatus: session.payment_status,
+    //       paidAt: new Date(),
+    //     };
+    //     const paymentResult = await paymentCollection.insertOne(payment);
+
+    //     return res.send({
+    //       success: true,
+    //       message: "Payment recorded successfully",
+    //       bookingUpdate: result,
+    //       payment: paymentResult,
+    //     });
+    //   } catch (error) {
+    //     console.log("Payment Error:", error);
+    //     return res.status(500).send({ success: false, error: error.message });
+    //   }
+    // });
+
+    app.patch("/payment-success", verifyFBToken, async (req, res) => {
       try {
         const sessionId = req.query.session_id;
         if (!sessionId)
@@ -508,47 +577,43 @@ async function run() {
 
         const session = await stripe.checkout.sessions.retrieve(sessionId);
 
-        if (session.payment_status !== "paid") {
-          return res.send({ success: false, message: "Payment not completed" });
-        }
-
-        const existingPayment = await paymentCollection.findOne({
-          transactionId: session.payment_intent,
-          userId: session.metadata.userId,
-        });
-
-        if (existingPayment) {
-          return res.send({
-            success: true,
-            message: "Payment already recorded",
-            payment: existingPayment,
+        if (session.payment_status === "paid") {
+          const existingPayment = await paymentCollection.findOne({
+            transactionId: session.payment_intent,
           });
+          if (existingPayment) {
+            return res.send({
+              success: true,
+              message: "Payment already recorded",
+              payment: existingPayment,
+            });
+          }
+
+          const bookingId = session.metadata.userId;
+          const query = { _id: new ObjectId(bookingId) };
+          const update = {
+            $set: {
+              paymentStatus: "paid",
+              bookingStatus: "Confirmed",
+              decoratorStatus: "Assign Pending",
+              paymentAt: new Date(),
+            },
+          };
+          const result = await bookingCollection.updateOne(query, update);
+
+          const payment = {
+            amount: session.amount_total / 100,
+            currency: session.currency,
+            userEmail: session.customer_email,
+            userId: session.metadata.userId,
+            userName: session.metadata.userName,
+            serviceName: session.metadata.serviceName,
+            transactionId: session.payment_intent,
+            paymentStatus: session.payment_status,
+            paidAt: new Date(),
+          };
+          const paymentResult = await paymentCollection.insertOne(payment);
         }
-
-        const bookingId = session.metadata.userId;
-        const query = { _id: new ObjectId(bookingId) };
-        const update = {
-          $set: {
-            paymentStatus: "paid",
-            bookingStatus: "Confirmed",
-            decoratorStatus: "Assign Pending",
-            paymentAt: new Date(),
-          },
-        };
-        const result = await bookingCollection.updateOne(query, update);
-
-        const payment = {
-          amount: session.amount_total / 100,
-          currency: session.currency,
-          userEmail: session.customer_email,
-          userId: session.metadata.userId,
-          userName: session.metadata.userName,
-          serviceName: session.metadata.serviceName,
-          transactionId: session.payment_intent,
-          paymentStatus: session.payment_status,
-          paidAt: new Date(),
-        };
-        const paymentResult = await paymentCollection.insertOne(payment);
 
         return res.send({
           success: true,
@@ -561,8 +626,6 @@ async function run() {
         return res.status(500).send({ success: false, error: error.message });
       }
     });
-
-
 
     // ---------------service center Apis --------------
     app.get("/serviceCenter", async (req, res) => {
@@ -584,3 +647,5 @@ run().catch(console.dir);
 app.listen(port, () => {
   console.log(`Example app listening on port ${port}`);
 });
+
+//
