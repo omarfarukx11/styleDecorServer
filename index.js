@@ -12,26 +12,20 @@ const uri = `mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASS}@cluster
 app.use(express.json());
 app.use(cors());
 
-const admin = require("firebase-admin");
+var admin = require("firebase-admin");
+
+const decoded = Buffer.from(process.env.FB_SERVICE_KEY, 'base64').toString('utf8')
+const serviceAccount = JSON.parse(decoded);
+
 
 admin.initializeApp({
-  credential: admin.credential.cert({
-    type: process.env.FIREBASE_TYPE,
-    project_id: process.env.FIREBASE_PROJECT_ID,
-    private_key_id: process.env.FIREBASE_PRIVATE_KEY_ID,
-    private_key: process.env.FIREBASE_PRIVATE_KEY.replace(/\\n/g, "\n"),
-    client_email: process.env.FIREBASE_CLIENT_EMAIL,
-    client_id: process.env.FIREBASE_CLIENT_ID,
-    auth_uri: process.env.FIREBASE_AUTH_URI,
-    token_uri: process.env.FIREBASE_TOKEN_URI,
-    auth_provider_x509_cert_url:
-      process.env.FIREBASE_AUTH_PROVIDER_X509_CERT_URL,
-    client_x509_cert_url: process.env.FIREBASE_CLIENT_X509_CERT_URL,
-  }),
+  credential: admin.credential.cert(serviceAccount)
 });
+
 
 const verifyFBToken = async (req, res, next) => {
   const token = req.headers?.authorization;
+  console.log(req.headers)
   if (!token) {
     return res.status(401).send({ message: "unauthorize access" });
   }
@@ -39,6 +33,7 @@ const verifyFBToken = async (req, res, next) => {
   try {
     const idToken = token.split(" ")[1];
     const decoded = await admin.auth().verifyIdToken(idToken);
+    
     req.decoded_email = decoded.email;
   } catch (err) {
     return res.status(401).send({ message: "unauthorize access" });
@@ -46,6 +41,8 @@ const verifyFBToken = async (req, res, next) => {
 
   next();
 };
+
+
 
 app.get("/", (req, res) => {
   res.send("lets begin");
@@ -58,9 +55,10 @@ const client = new MongoClient(uri, {
     deprecationErrors: true,
   },
 });
+
 async function run() {
   try {
-    await client.connect();
+    // await client.connect();
     const db = client.db("servicesdb");
     const usersCollection = db.collection("users");
     const servicesCollection = db.collection("services");
@@ -99,6 +97,7 @@ async function run() {
       if (email !== req.decoded_email) {
         return res.status(403).send({ message: "forbidden access" });
       }
+      
       const query = { email };
       const user = await usersCollection.findOne(query);
       res.send({ role: user?.role || "user" });
@@ -145,7 +144,7 @@ async function run() {
 
 
     //------------- services apis ------------
-    app.get("/services", verifyFBToken, async (req, res) => {
+    app.get("/services", async (req, res) => {
       const cursor = servicesCollection
         .find()
         .project({ description: 0 })
@@ -155,7 +154,7 @@ async function run() {
       res.send(result);
     });
 
-    app.get("/allServices", verifyFBToken, async (req, res) => {
+    app.get("/allServices", async (req, res) => {
       let { search, type, minPrice, maxPrice, page, limit } = req.query;
 
       page = parseInt(page) || 1;
@@ -181,7 +180,7 @@ async function run() {
       res.send({ result, total });
     });
 
-    app.get("/servicesDetails/:id", verifyFBToken, async (req, res) => {
+    app.get("/servicesDetails/:id", async (req, res) => {
       const id = req.params.id;
       const query = { _id: new ObjectId(id) };
       const result = await servicesCollection.findOne(query);
@@ -221,7 +220,7 @@ async function run() {
 
 
     // -------------Decorator related Apis --------------
-    app.get("/topDecorators", verifyFBToken, async (req, res) => {
+    app.get("/topDecorators", async (req, res) => {
       const cursor = decoratorsCollection.find().sort({ rating: -1 }).limit(6);
       const result = await cursor.toArray();
       res.send(result);
@@ -470,7 +469,7 @@ async function run() {
         .toArray();
       res.send(result);
     });
-    app.post("/create-checkout-session", verifyFBToken, async (req, res) => {
+    app.post("/create-checkout-session",  async (req, res) => {
       const paymentInfo = req.body;
       const amount = parseInt(paymentInfo.cost) * 100;
       const session = await stripe.checkout.sessions.create({
@@ -499,7 +498,7 @@ async function run() {
       res.send({ url: session.url });
     });
 
-    app.patch("/payment-success", verifyFBToken, async (req, res) => {
+    app.patch("/payment-success", verifyFBToken,  async (req, res) => {
       try {
         const sessionId = req.query.session_id;
         if (!sessionId)
@@ -566,16 +565,16 @@ async function run() {
 
 
     // ---------------service center Apis --------------
-    app.get("/serviceCenter", verifyFBToken, async (req, res) => {
+    app.get("/serviceCenter", async (req, res) => {
       const cursor = serviceCenterCollection.find();
       const result = await cursor.toArray();
       res.send(result);
     });
 
-    await client.db("admin").command({ ping: 1 });
-    console.log(
-      "Pinged your deployment. You successfully connected to MongoDB!"
-    );
+    // await client.db("admin").command({ ping: 1 });
+    // console.log(
+    //   "Pinged your deployment. You successfully connected to MongoDB!"
+    // );
   } finally {
   }
 }

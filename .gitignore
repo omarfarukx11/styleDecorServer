@@ -1,2 +1,4 @@
 node_modules
 .env
+styledecor-x11-firebase-adminsdk.json
+.vercel
