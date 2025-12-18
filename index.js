@@ -63,9 +63,9 @@ async function run() {
     const decoratorsCollection = db.collection("decorators");
     const serviceCenterCollection = db.collection("serviceCenter");
     const bookingCollection = db.collection("bookings");
-    const paymentCollection = db.collection("payments").createIndex({ transactionId: 1 }, { unique: true })
+    const paymentCollection = db.collection("payments");
     const earningCollection = db.collection("earning");
-    // 
+
     const verifyAdmin = async (req, res, next) => {
       const email = req.decoded_email;
       const query = { email };
@@ -290,8 +290,7 @@ async function run() {
     });
 
     //// ----------------decorator earning api
-    app.get(
-      "/decorator-earnings/:email",
+    app.get("/decorator-earnings/:email",
       verifyFBToken,
       verifyDecorator,
       async (req, res) => {
@@ -304,6 +303,24 @@ async function run() {
         res.send(earnings);
       }
     );
+    app.get("/admin-stats", verifyFBToken, verifyAdmin, async (req, res) => {
+  const payments = await paymentCollection.find().toArray();
+  
+  // 1. Total Revenue calculation
+  const totalRevenue = payments.reduce((sum, payment) => sum + payment.price, 0);
+
+  // 2. Revenue by Category (Chart er jonne)
+  const revenueByCategory = await paymentCollection.aggregate([
+    {
+      $group: {
+        _id: "$category",
+        total: { $sum: "$price" }
+      }
+    }
+  ]).toArray();
+
+  res.send({ totalRevenue, revenueByCategory, totalBookings: payments.length });
+});
 
     // booking Related Apis
     app.get("/allBooking", verifyFBToken, verifyAdmin, async (req, res) => {
@@ -341,15 +358,17 @@ async function run() {
       res.send(cursor);
     });
 
-    app.get(
-      "/booking/:email",
+    app.get("/booking/:email",
       verifyFBToken,
       verifyDecorator,
       async (req, res) => {
         const email = req.params.email;
         const query = { decoratorEmail: email };
 
-        const bookings = await bookingCollection.find(query).toArray();
+        const bookings = await bookingCollection
+          .find(query)
+          .sort({ assignAt: 1 })
+          .toArray();
         res.send(bookings);
       }
     );
@@ -376,8 +395,7 @@ async function run() {
       res.send(result);
     });
 
-    app.patch(
-      "/afterAssign/:id",
+    app.patch("/afterAssign/:id",
       verifyFBToken,
       verifyAdmin,
       async (req, res) => {
@@ -400,8 +418,10 @@ async function run() {
             decoratorStatus: "decorator Assigned",
             bookingRegion: bookingRegion,
             bookingDistrict: bookingDistrict,
+            assignAt: new Date(),
           },
         };
+
         const result = await bookingCollection.updateOne(query, updateDoc);
         res.send(result);
         const decoratorQuery = { _id: new ObjectId(decoratorID) };
@@ -419,8 +439,7 @@ async function run() {
       }
     );
 
-    app.patch(
-      "/booking/:id/status",
+    app.patch("/booking/:id/status",
       verifyFBToken,
       verifyDecorator,
       async (req, res) => {
@@ -454,12 +473,13 @@ async function run() {
       }
     );
 
-    app.delete("/booking/:id", verifyFBToken, async (req, res) => {
+    app.delete("/booking/:id", async (req, res) => {
       const id = req.params.id;
       const query = { _id: new ObjectId(id) };
       const result = await bookingCollection.deleteOne(query);
       res.send(result);
     });
+
 
     // payment related apis-------------
     app.get("/payment-history", verifyFBToken, async (req, res) => {
@@ -474,6 +494,7 @@ async function run() {
         .toArray();
       res.send(result);
     });
+
     app.post("/create-checkout-session", async (req, res) => {
       const paymentInfo = req.body;
       const amount = parseInt(paymentInfo.cost) * 100;
@@ -503,94 +524,37 @@ async function run() {
       res.send({ url: session.url });
     });
 
-    // app.patch("/payment-success", verifyFBToken,  async (req, res) => {
-    //   try {
-    //     const sessionId = req.query.session_id;
-    //     if (!sessionId)
-    //       return res
-    //         .status(400)
-    //         .send({ success: false, message: "Session ID missing" });
-
-    //     const session = await stripe.checkout.sessions.retrieve(sessionId);
-
-    //     if (session.payment_status !== "paid") {
-    //       return res.send({ success: false, message: "Payment not completed" });
-    //     }
-
-    //     const existingPayment = await paymentCollection.findOne({
-    //       transactionId: session.payment_intent,
-    //       userId: session.metadata.userId,
-    //     });
-
-    //     if (existingPayment) {
-    //       return res.send({
-    //         success: true,
-    //         message: "Payment already recorded",
-    //         payment: existingPayment,
-    //       });
-    //     }
-
-    //     const bookingId = session.metadata.userId;
-    //     const query = { _id: new ObjectId(bookingId) };
-    //     const update = {
-    //       $set: {
-    //         paymentStatus: "paid",
-    //         bookingStatus: "Confirmed",
-    //         decoratorStatus: "Assign Pending",
-    //         paymentAt: new Date(),
-    //       },
-    //     };
-    //     const result = await bookingCollection.updateOne(query, update);
-
-    //     const payment = {
-    //       amount: session.amount_total / 100,
-    //       currency: session.currency,
-    //       userEmail: session.customer_email,
-    //       userId: session.metadata.userId,
-    //       userName: session.metadata.userName,
-    //       serviceName: session.metadata.serviceName,
-    //       transactionId: session.payment_intent,
-    //       paymentStatus: session.payment_status,
-    //       paidAt: new Date(),
-    //     };
-    //     const paymentResult = await paymentCollection.insertOne(payment);
-
-    //     return res.send({
-    //       success: true,
-    //       message: "Payment recorded successfully",
-    //       bookingUpdate: result,
-    //       payment: paymentResult,
-    //     });
-    //   } catch (error) {
-    //     console.log("Payment Error:", error);
-    //     return res.status(500).send({ success: false, error: error.message });
-    //   }
-    // });
-
-    app.patch("/payment-success", verifyFBToken, async (req, res) => {
+    app.patch("/payment-success", async (req, res) => {
       try {
         const sessionId = req.query.session_id;
-        if (!sessionId)
+        if (!sessionId) {
           return res
             .status(400)
             .send({ success: false, message: "Session ID missing" });
+        }
 
         const session = await stripe.checkout.sessions.retrieve(sessionId);
+
+        let bookingUpdate = null;
+        let paymentResult = null;
 
         if (session.payment_status === "paid") {
           const existingPayment = await paymentCollection.findOne({
             transactionId: session.payment_intent,
           });
+
           if (existingPayment) {
             return res.send({
               success: true,
               message: "Payment already recorded",
+              bookingUpdate: null,
               payment: existingPayment,
             });
           }
 
           const bookingId = session.metadata.userId;
           const query = { _id: new ObjectId(bookingId) };
+
           const update = {
             $set: {
               paymentStatus: "paid",
@@ -599,7 +563,8 @@ async function run() {
               paymentAt: new Date(),
             },
           };
-          const result = await bookingCollection.updateOne(query, update);
+
+          bookingUpdate = await bookingCollection.updateOne(query, update);
 
           const payment = {
             amount: session.amount_total / 100,
@@ -612,17 +577,18 @@ async function run() {
             paymentStatus: session.payment_status,
             paidAt: new Date(),
           };
-          const paymentResult = await paymentCollection.insertOne(payment);
+
+          paymentResult = await paymentCollection.insertOne(payment);
         }
 
         return res.send({
           success: true,
-          message: "Payment recorded successfully",
-          bookingUpdate: result,
+          message: "Payment processed",
+          bookingUpdate,
           payment: paymentResult,
         });
       } catch (error) {
-        console.log("Payment Error:", error);
+        console.error("Payment Error:", error);
         return res.status(500).send({ success: false, error: error.message });
       }
     });
@@ -633,11 +599,6 @@ async function run() {
       const result = await cursor.toArray();
       res.send(result);
     });
-
-    // await client.db("admin").command({ ping: 1 });
-    // console.log(
-    //   "Pinged your deployment. You successfully connected to MongoDB!"
-    // );
   } finally {
   }
 }
@@ -647,5 +608,3 @@ run().catch(console.dir);
 app.listen(port, () => {
   console.log(`Example app listening on port ${port}`);
 });
-
-//
