@@ -56,7 +56,6 @@ const client = new MongoClient(uri, {
 
 async function run() {
   try {
-    // await client.connect();
     const db = client.db("servicesdb");
     const usersCollection = db.collection("users");
     const servicesCollection = db.collection("services");
@@ -149,7 +148,6 @@ async function run() {
       const result = await cursor.toArray();
       res.send(result);
     });
-
     app.get("/allServices", async (req, res) => {
       let { search, type, minPrice, maxPrice, page, limit } = req.query;
 
@@ -237,7 +235,6 @@ async function run() {
         res.status(500).send({ message: "Server error" });
       }
     });
-
     app.get("/assignDecorators", verifyFBToken, async (req, res) => {
       const { status, district } = req.query;
       const query = {};
@@ -258,14 +255,14 @@ async function run() {
       res.send(user);
     });
 
-    app.post("/decorators", verifyFBToken, async (req, res) => {
+    app.post("/newDecorators", verifyFBToken,  async (req, res) => {
       const decorator = req.body;
+      decorator.createAt = new Date();
       const result = await decoratorsCollection.insertOne(decorator);
       res.send(result);
     });
 
-    app.patch(
-      "/updateDecoratorsWorkStatus/:id",
+    app.patch("/updateDecoratorsWorkStatus/:id",
       verifyFBToken,
       async (req, res) => {
         const id = req.params.id;
@@ -282,15 +279,36 @@ async function run() {
       }
     );
 
-    app.delete("/deleteDecorators/:id", async (req, res) => {
-      const id = req.params.id;
-      const query = { _id: new ObjectId(id) };
-      const result = await decoratorsCollection.deleteOne(query);
-      res.send(result);
-    });
+  app.delete("/deleteDecorators/:id", async (req, res) => {
+  try {
+    const id = req.params.id;
+    const decorator = await decoratorsCollection.findOne({ _id: new ObjectId(id) });
+
+    if (!decorator) {
+      return res.status(404).send({ message: "Decorator not found" });
+    }
+    const deleteResult = await decoratorsCollection.deleteOne({ _id: new ObjectId(id) });
+    if (deleteResult.deletedCount > 0 && decorator.email) {
+      const userUpdateResult = await usersCollection.updateOne(
+        { email: decorator.email },
+        { $set: { role: "user" } }
+      );
+      console.log("User patch result:", userUpdateResult);
+    }
+    res.send({ deleted: deleteResult.deletedCount > 0 });
+  } catch (err) {
+    console.error(err);
+    res.status(500).send({ message: "Internal Server Error" });
+  }
+});
+
+
+
+
 
     //// ----------------decorator earning api
-    app.get("/decorator-earnings/:email",
+    app.get(
+      "/decorator-earnings/:email",
       verifyFBToken,
       verifyDecorator,
       async (req, res) => {
@@ -303,24 +321,6 @@ async function run() {
         res.send(earnings);
       }
     );
-    app.get("/admin-stats", verifyFBToken, verifyAdmin, async (req, res) => {
-  const payments = await paymentCollection.find().toArray();
-  
-  // 1. Total Revenue calculation
-  const totalRevenue = payments.reduce((sum, payment) => sum + payment.price, 0);
-
-  // 2. Revenue by Category (Chart er jonne)
-  const revenueByCategory = await paymentCollection.aggregate([
-    {
-      $group: {
-        _id: "$category",
-        total: { $sum: "$price" }
-      }
-    }
-  ]).toArray();
-
-  res.send({ totalRevenue, revenueByCategory, totalBookings: payments.length });
-});
 
     // booking Related Apis
     app.get("/allBooking", verifyFBToken, verifyAdmin, async (req, res) => {
@@ -358,7 +358,8 @@ async function run() {
       res.send(cursor);
     });
 
-    app.get("/booking/:email",
+    app.get(
+      "/booking/:email",
       verifyFBToken,
       verifyDecorator,
       async (req, res) => {
@@ -395,7 +396,8 @@ async function run() {
       res.send(result);
     });
 
-    app.patch("/afterAssign/:id",
+    app.patch(
+      "/afterAssign/:id",
       verifyFBToken,
       verifyAdmin,
       async (req, res) => {
@@ -439,7 +441,8 @@ async function run() {
       }
     );
 
-    app.patch("/booking/:id/status",
+    app.patch(
+      "/booking/:id/status",
       verifyFBToken,
       verifyDecorator,
       async (req, res) => {
@@ -479,7 +482,6 @@ async function run() {
       const result = await bookingCollection.deleteOne(query);
       res.send(result);
     });
-
 
     // payment related apis-------------
     app.get("/payment-history", verifyFBToken, async (req, res) => {
