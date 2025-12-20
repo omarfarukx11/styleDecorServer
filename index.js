@@ -322,6 +322,9 @@ async function run() {
       }
     );
 
+
+
+
     // booking Related Apis
     app.get("/allBooking", verifyFBToken, verifyAdmin, async (req, res) => {
       let { page, limit } = req.query;
@@ -377,7 +380,7 @@ async function run() {
     app.post("/booking", verifyFBToken, async (req, res) => {
       const book = req.body;
       book.createAt = new Date();
-      book.decoratorStatus = "Not Assign";
+      book.decoratorStatus = "Assign Pending";
       const result = await bookingCollection.insertOne(book);
       res.send(result);
     });
@@ -484,7 +487,7 @@ async function run() {
     });
 
     // payment related apis-------------
-    app.get("/payment-history", verifyFBToken, async (req, res) => {
+    app.get("/payment-history", async (req, res) => {
       const email = req.query.email;
       const query = {};
       if (email) {
@@ -525,6 +528,7 @@ async function run() {
       });
       res.send({ url: session.url });
     });
+
 
     app.patch("/payment-success", async (req, res) => {
       try {
