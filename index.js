@@ -212,7 +212,7 @@ async function run() {
 
     
     // -------------Decorator related Apis --------------
-    app.get("/topDecorators", verifyFBToken, async (req, res) => {
+    app.get("/topDecorators", async (req, res) => {
       const cursor = decoratorsCollection.find().sort({ rating: -1 }).limit(6);
       const result = await cursor.toArray();
       res.send(result);
