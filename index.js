@@ -148,7 +148,7 @@ async function run() {
       const result = await cursor.toArray();
       res.send(result);
     });
-    app.get("/allServices", async (req, res) => {
+    app.get("/allServices",  async (req, res) => {
       let { search, type, minPrice, maxPrice, page, limit } = req.query;
 
       page = parseInt(page) || 1;
@@ -181,14 +181,14 @@ async function run() {
       res.send(result);
     });
 
-    app.post("/newServices", verifyFBToken, async (req, res) => {
+    app.post("/newServices", verifyFBToken, verifyAdmin, async (req, res) => {
       const newService = req.body;
       newService.createAt = new Date();
       const result = await servicesCollection.insertOne(newService);
       res.send(result);
     });
 
-    app.patch("/servicesDetails/:id", verifyFBToken, async (req, res) => {
+    app.patch("/servicesDetails/:id", verifyFBToken, verifyAdmin, async (req, res) => {
       const id = req.params.id;
       const updateInfo = req.body;
       const query = { _id: new ObjectId(id) };
@@ -202,7 +202,7 @@ async function run() {
       res.send(result);
     });
 
-    app.delete("/deleteService/:id", verifyFBToken, async (req, res) => {
+    app.delete("/deleteService/:id", verifyFBToken, verifyAdmin, async (req, res) => {
       const id = req.params.id;
       const query = { _id: new ObjectId(id) };
       const result = await servicesCollection.deleteOne(query);
@@ -212,13 +212,13 @@ async function run() {
 
     
     // -------------Decorator related Apis --------------
-    app.get("/topDecorators", async (req, res) => {
+    app.get("/topDecorators", verifyFBToken, async (req, res) => {
       const cursor = decoratorsCollection.find().sort({ rating: -1 }).limit(6);
       const result = await cursor.toArray();
       res.send(result);
     });
 
-    app.get("/allDecorators", verifyFBToken, async (req, res) => {
+    app.get("/allDecorators", verifyFBToken, verifyAdmin, async (req, res) => {
       let { page, limit } = req.query;
       page = parseInt(page) || 1;
       limit = parseInt(limit) || 20;
@@ -237,7 +237,7 @@ async function run() {
         res.status(500).send({ message: "Server error" });
       }
     });
-    app.get("/assignDecorators", verifyFBToken, async (req, res) => {
+    app.get("/assignDecorators", verifyFBToken, verifyAdmin, async (req, res) => {
       const { status, district } = req.query;
       const query = {};
       if (status) {
@@ -250,22 +250,21 @@ async function run() {
       const result = await cursor.toArray();
       res.send(result);
     });
-    app.get("/decorator/:email", verifyFBToken, async (req, res) => {
+    app.get("/decorator/:email", verifyFBToken, verifyDecorator,  async (req, res) => {
       const email = req.params.email;
       const query = { email };
       const user = await decoratorsCollection.findOne(query);
       res.send(user);
     });
 
-    app.post("/newDecorators", verifyFBToken,  async (req, res) => {
+    app.post("/newDecorators", verifyFBToken, verifyAdmin,  async (req, res) => {
       const decorator = req.body;
       decorator.createAt = new Date();
       const result = await decoratorsCollection.insertOne(decorator);
       res.send(result);
     });
 
-    app.patch("/updateDecoratorsWorkStatus/:id",
-      verifyFBToken,
+    app.patch("/updateDecoratorsWorkStatus/:id", verifyFBToken, verifyDecorator,
       async (req, res) => {
         const id = req.params.id;
         const { status } = req.body;
@@ -281,29 +280,28 @@ async function run() {
       }
     );
 
-  app.delete("/deleteDecorators/:id", async (req, res) => {
-  try {
-    const id = req.params.id;
-    const decorator = await decoratorsCollection.findOne({ _id: new ObjectId(id) });
+    app.delete("/deleteDecorators/:id", verifyFBToken , verifyAdmin, async (req, res) => {
+    try {
+      const id = req.params.id;
+      const decorator = await decoratorsCollection.findOne({ _id: new ObjectId(id) });
 
-    if (!decorator) {
-      return res.status(404).send({ message: "Decorator not found" });
+      if (!decorator) {
+        return res.status(404).send({ message: "Decorator not found" });
+      }
+      const deleteResult = await decoratorsCollection.deleteOne({ _id: new ObjectId(id) });
+      if (deleteResult.deletedCount > 0 && decorator.email) {
+        const userUpdateResult = await usersCollection.updateOne(
+          { email: decorator.email },
+          { $set: { role: "user" } }
+        );
+        console.log("User patch result:", userUpdateResult);
+      }
+      res.send({ deleted: deleteResult.deletedCount > 0 });
+    } catch (err) {
+      console.error(err);
+      res.status(500).send({ message: "Internal Server Error" });
     }
-    const deleteResult = await decoratorsCollection.deleteOne({ _id: new ObjectId(id) });
-    if (deleteResult.deletedCount > 0 && decorator.email) {
-      const userUpdateResult = await usersCollection.updateOne(
-        { email: decorator.email },
-        { $set: { role: "user" } }
-      );
-      console.log("User patch result:", userUpdateResult);
-    }
-    res.send({ deleted: deleteResult.deletedCount > 0 });
-  } catch (err) {
-    console.error(err);
-    res.status(500).send({ message: "Internal Server Error" });
-  }
-});
-
+  });
 
 
 
@@ -446,8 +444,7 @@ async function run() {
       }
     );
 
-    app.patch(
-      "/booking/:id/status",
+    app.patch("/booking/:id/status",
       verifyFBToken,
       verifyDecorator,
       async (req, res) => {
@@ -481,15 +478,17 @@ async function run() {
       }
     );
 
-    app.delete("/booking/:id", async (req, res) => {
+    app.delete("/booking/:id", verifyFBToken, async (req, res) => {
       const id = req.params.id;
       const query = { _id: new ObjectId(id) };
       const result = await bookingCollection.deleteOne(query);
       res.send(result);
     });
+  
+
 
     // payment related apis-------------
-    app.get("/payment-history", async (req, res) => {
+    app.get("/payment-history", verifyFBToken, async (req, res) => {
       const email = req.query.email;
       const query = {};
       if (email) {
@@ -502,7 +501,7 @@ async function run() {
       res.send(result);
     });
 
-    app.get("/all-payment-history", async (req, res) => {
+    app.get("/all-payment-history", verifyFBToken , verifyDecorator, async (req, res) => {
       const result = await paymentCollection.find().toArray();
       res.send(result);
     });
@@ -530,14 +529,14 @@ async function run() {
           serviceName: paymentInfo.serviceName,
         },
         mode: "payment",
-        success_url: `${process.env.SITE_DOMAIN}/dashboard/my-bookings?session_id={CHECKOUT_SESSION_ID}`,
+        success_url: `${process.env.SITE_DOMAIN}/dashboard/payment-history?session_id={CHECKOUT_SESSION_ID}`,
         cancel_url: `${process.env.SITE_DOMAIN}/dashboard/my-bookings`,
       });
       res.send({ url: session.url });
     });
 
 
-    app.patch("/payment-success", async (req, res) => {
+    app.patch("/payment-success", verifyFBToken, async (req, res) => {
       try {
         const sessionId = req.query.session_id;
         if (!sessionId) {
