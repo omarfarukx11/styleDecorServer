@@ -209,6 +209,8 @@ async function run() {
       res.send(result);
     });
 
+
+    
     // -------------Decorator related Apis --------------
     app.get("/topDecorators", async (req, res) => {
       const cursor = decoratorsCollection.find().sort({ rating: -1 }).limit(6);
@@ -500,6 +502,11 @@ async function run() {
       res.send(result);
     });
 
+    app.get("/all-payment-history", async (req, res) => {
+      const result = await paymentCollection.find().toArray();
+      res.send(result);
+    });
+
     app.post("/create-checkout-session", async (req, res) => {
       const paymentInfo = req.body;
       const amount = parseInt(paymentInfo.cost) * 100;
@@ -523,7 +530,7 @@ async function run() {
           serviceName: paymentInfo.serviceName,
         },
         mode: "payment",
-        success_url: `${process.env.SITE_DOMAIN}/dashboard/payment-history?session_id={CHECKOUT_SESSION_ID}`,
+        success_url: `${process.env.SITE_DOMAIN}/dashboard/my-bookings?session_id={CHECKOUT_SESSION_ID}`,
         cancel_url: `${process.env.SITE_DOMAIN}/dashboard/my-bookings`,
       });
       res.send({ url: session.url });
