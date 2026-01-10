@@ -501,7 +501,7 @@ async function run() {
       res.send(result);
     });
 
-    app.get("/all-payment-history", verifyFBToken , verifyDecorator, async (req, res) => {
+    app.get("/all-payment-history", verifyFBToken , verifyAdmin, async (req, res) => {
       const result = await paymentCollection.find().toArray();
       res.send(result);
     });
