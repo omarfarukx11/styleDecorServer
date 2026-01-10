@@ -64,6 +64,7 @@ async function run() {
     const bookingCollection = db.collection("bookings");
     const paymentCollection = db.collection("payments");
     const earningCollection = db.collection("earning");
+    const reviewCollection = db.collection("reivew");
 
     const verifyAdmin = async (req, res, next) => {
       const email = req.decoded_email;
@@ -138,17 +139,18 @@ async function run() {
       res.send(result);
     });
 
+
     //------------- services apis ------------
     app.get("/services", async (req, res) => {
       const cursor = servicesCollection
         .find()
         .project({ description: 0 })
         .sort({ rating: -1 })
-        .limit(6);
+        .limit(10);
       const result = await cursor.toArray();
       res.send(result);
     });
-    app.get("/allServices",  async (req, res) => {
+    app.get("/allServices", async (req, res) => {
       let { search, type, minPrice, maxPrice, page, limit } = req.query;
 
       page = parseInt(page) || 1;
@@ -188,32 +190,40 @@ async function run() {
       res.send(result);
     });
 
-    app.patch("/servicesDetails/:id", verifyFBToken, verifyAdmin, async (req, res) => {
-      const id = req.params.id;
-      const updateInfo = req.body;
-      const query = { _id: new ObjectId(id) };
-      const updateDoc = {
-        $set: {
-          ...updateInfo,
-          updatedAt: new Date(),
-        },
-      };
-      const result = await servicesCollection.updateOne(query, updateDoc);
-      res.send(result);
-    });
+    app.patch(
+      "/servicesDetails/:id",
+      verifyFBToken,
+      verifyAdmin,
+      async (req, res) => {
+        const id = req.params.id;
+        const updateInfo = req.body;
+        const query = { _id: new ObjectId(id) };
+        const updateDoc = {
+          $set: {
+            ...updateInfo,
+            updatedAt: new Date(),
+          },
+        };
+        const result = await servicesCollection.updateOne(query, updateDoc);
+        res.send(result);
+      }
+    );
 
-    app.delete("/deleteService/:id", verifyFBToken, verifyAdmin, async (req, res) => {
-      const id = req.params.id;
-      const query = { _id: new ObjectId(id) };
-      const result = await servicesCollection.deleteOne(query);
-      res.send(result);
-    });
+    app.delete(
+      "/deleteService/:id",
+      verifyFBToken,
+      verifyAdmin,
+      async (req, res) => {
+        const id = req.params.id;
+        const query = { _id: new ObjectId(id) };
+        const result = await servicesCollection.deleteOne(query);
+        res.send(result);
+      }
+    );
 
-
-    
     // -------------Decorator related Apis --------------
     app.get("/topDecorators", async (req, res) => {
-      const cursor = decoratorsCollection.find().sort({ rating: -1 }).limit(6);
+      const cursor = decoratorsCollection.find().sort({ rating: -1 }).limit(10);
       const result = await cursor.toArray();
       res.send(result);
     });
@@ -237,34 +247,47 @@ async function run() {
         res.status(500).send({ message: "Server error" });
       }
     });
-    app.get("/assignDecorators", verifyFBToken, verifyAdmin, async (req, res) => {
-      const { status, district } = req.query;
-      const query = {};
-      if (status) {
-        query.status = status;
+    app.get(
+      "/assignDecorators",
+      verifyFBToken,
+      verifyAdmin,
+      async (req, res) => {
+        const { status, district } = req.query;
+        const query = {};
+        if (status) {
+          query.status = status;
+        }
+        if (district) {
+          query.district = district;
+        }
+        const cursor = decoratorsCollection.find(query);
+        const result = await cursor.toArray();
+        res.send(result);
       }
-      if (district) {
-        query.district = district;
+    );
+    app.get(
+      "/decorator/:email",
+      verifyFBToken,
+      verifyDecorator,
+      async (req, res) => {
+        const email = req.params.email;
+        const query = { email };
+        const user = await decoratorsCollection.findOne(query);
+        res.send(user);
       }
-      const cursor = decoratorsCollection.find(query);
-      const result = await cursor.toArray();
-      res.send(result);
-    });
-    app.get("/decorator/:email", verifyFBToken, verifyDecorator,  async (req, res) => {
-      const email = req.params.email;
-      const query = { email };
-      const user = await decoratorsCollection.findOne(query);
-      res.send(user);
-    });
+    );
 
-    app.post("/newDecorators", verifyFBToken, verifyAdmin,  async (req, res) => {
+    app.post("/newDecorators", verifyFBToken, verifyAdmin, async (req, res) => {
       const decorator = req.body;
       decorator.createAt = new Date();
       const result = await decoratorsCollection.insertOne(decorator);
       res.send(result);
     });
 
-    app.patch("/updateDecoratorsWorkStatus/:id", verifyFBToken, verifyDecorator,
+    app.patch(
+      "/updateDecoratorsWorkStatus/:id",
+      verifyFBToken,
+      verifyDecorator,
       async (req, res) => {
         const id = req.params.id;
         const { status } = req.body;
@@ -280,31 +303,37 @@ async function run() {
       }
     );
 
-    app.delete("/deleteDecorators/:id", verifyFBToken , verifyAdmin, async (req, res) => {
-    try {
-      const id = req.params.id;
-      const decorator = await decoratorsCollection.findOne({ _id: new ObjectId(id) });
+    app.delete(
+      "/deleteDecorators/:id",
+      verifyFBToken,
+      verifyAdmin,
+      async (req, res) => {
+        try {
+          const id = req.params.id;
+          const decorator = await decoratorsCollection.findOne({
+            _id: new ObjectId(id),
+          });
 
-      if (!decorator) {
-        return res.status(404).send({ message: "Decorator not found" });
+          if (!decorator) {
+            return res.status(404).send({ message: "Decorator not found" });
+          }
+          const deleteResult = await decoratorsCollection.deleteOne({
+            _id: new ObjectId(id),
+          });
+          if (deleteResult.deletedCount > 0 && decorator.email) {
+            const userUpdateResult = await usersCollection.updateOne(
+              { email: decorator.email },
+              { $set: { role: "user" } }
+            );
+            console.log("User patch result:", userUpdateResult);
+          }
+          res.send({ deleted: deleteResult.deletedCount > 0 });
+        } catch (err) {
+          console.error(err);
+          res.status(500).send({ message: "Internal Server Error" });
+        }
       }
-      const deleteResult = await decoratorsCollection.deleteOne({ _id: new ObjectId(id) });
-      if (deleteResult.deletedCount > 0 && decorator.email) {
-        const userUpdateResult = await usersCollection.updateOne(
-          { email: decorator.email },
-          { $set: { role: "user" } }
-        );
-        console.log("User patch result:", userUpdateResult);
-      }
-      res.send({ deleted: deleteResult.deletedCount > 0 });
-    } catch (err) {
-      console.error(err);
-      res.status(500).send({ message: "Internal Server Error" });
-    }
-  });
-
-
-
+    );
 
     //// ----------------decorator earning api
     app.get(
@@ -321,9 +350,6 @@ async function run() {
         res.send(earnings);
       }
     );
-
-
-
 
     // booking Related Apis
     app.get("/allBooking", verifyFBToken, verifyAdmin, async (req, res) => {
@@ -361,8 +387,7 @@ async function run() {
       res.send(cursor);
     });
 
-    app.get(
-      "/booking/:email",
+    app.get("/booking/:email",
       verifyFBToken,
       verifyDecorator,
       async (req, res) => {
@@ -444,7 +469,8 @@ async function run() {
       }
     );
 
-    app.patch("/booking/:id/status",
+    app.patch(
+      "/booking/:id/status",
       verifyFBToken,
       verifyDecorator,
       async (req, res) => {
@@ -484,8 +510,6 @@ async function run() {
       const result = await bookingCollection.deleteOne(query);
       res.send(result);
     });
-  
-
 
     // payment related apis-------------
     app.get("/payment-history", verifyFBToken, async (req, res) => {
@@ -501,10 +525,15 @@ async function run() {
       res.send(result);
     });
 
-    app.get("/all-payment-history", verifyFBToken , verifyAdmin, async (req, res) => {
-      const result = await paymentCollection.find().toArray();
-      res.send(result);
-    });
+    app.get(
+      "/all-payment-history",
+      verifyFBToken,
+      verifyAdmin,
+      async (req, res) => {
+        const result = await paymentCollection.find().toArray();
+        res.send(result);
+      }
+    );
 
     app.post("/create-checkout-session", async (req, res) => {
       const paymentInfo = req.body;
@@ -534,7 +563,6 @@ async function run() {
       });
       res.send({ url: session.url });
     });
-
 
     app.patch("/payment-success", verifyFBToken, async (req, res) => {
       try {
@@ -603,6 +631,22 @@ async function run() {
         console.error("Payment Error:", error);
         return res.status(500).send({ success: false, error: error.message });
       }
+    });
+
+
+    // --- REVIEWS API ---
+    app.post("/new-review", verifyFBToken, async (req, res) => {
+      const review = req.body;
+      const result = await reviewCollection.insertOne(review);
+      res.send(result);
+    });
+
+    app.get("/reviews", async (req, res) => {
+      const result = await reviewCollection
+        .find()
+        .sort({ date: -1 }) 
+        .toArray();
+      res.send(result);
     });
 
     // ---------------service center Apis --------------
